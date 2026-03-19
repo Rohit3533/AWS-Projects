@@ -1,0 +1,71 @@
+services:
+  user-service:
+    build: ./user-service
+    container_name: user-service
+    ports:
+      - "8081:8081"
+    volumes:
+      - user-data:/data
+    networks:
+      - microservices-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    environment:
+      - SPRING_PROFILES_ACTIVE=default
+      - H2_DATA_DIR=/data
+
+  product-service:
+    build: ./product-service
+    container_name: product-service
+    ports:
+      - "8082:8082"
+    volumes:
+      - product-data:/data
+    networks:
+      - microservices-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    environment:
+      - SPRING_PROFILES_ACTIVE=default
+      - H2_DATA_DIR=/data
+
+  order-service:
+    build: ./order-service
+    container_name: order-service
+    ports:
+      - "8083:8083"
+    volumes:
+      - order-data:/data
+    depends_on:
+      - user-service
+      - product-service
+    networks:
+      - microservices-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8083/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    environment:
+      - SPRING_PROFILES_ACTIVE=default
+      - USER_SERVICE_URL=http://user-service:8081
+      - PRODUCT_SERVICE_URL=http://product-service:8082
+      - H2_DATA_DIR=/data
+
+networks:
+  microservices-net:
+    driver: bridge
+
+volumes:
+  user-data:
+  product-data:
+  order-data:

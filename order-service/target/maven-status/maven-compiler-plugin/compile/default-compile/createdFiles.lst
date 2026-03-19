@@ -1,0 +1,7 @@
+com\devops\orderservice\model\Order.class
+com\devops\orderservice\config\RestTemplateConfig.class
+com\devops\orderservice\service\OrderService.class
+com\devops\orderservice\OrderServiceApplication.class
+com\devops\orderservice\repository\OrderRepository.class
+com\devops\orderservice\controller\OrderController.class
+com\devops\orderservice\filter\CorrelationIdFilter.class

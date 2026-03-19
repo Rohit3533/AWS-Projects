@@ -1,0 +1,40 @@
+# QA Profile — Aurora MySQL on AWS
+server:
+  port: 8083
+
+spring:
+  application:
+    name: order-service
+  datasource:
+    url: ${DB_URL:jdbc:mysql://your-aurora-cluster.cluster-xxxx.us-east-1.rds.amazonaws.com:3306/orderdb}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    username: ${DB_USERNAME:admin}
+    password: ${DB_PASSWORD:changeme}
+  jpa:
+    hibernate:
+      ddl-auto: none
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+  h2:
+    console:
+      enabled: false
+  liquibase:
+    change-log: classpath:db/changelog/db.changelog-master.xml
+    enabled: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+
+services:
+  user-service:
+    url: ${USER_SERVICE_URL:http://localhost:8081}
+  product-service:
+    url: ${PRODUCT_SERVICE_URL:http://localhost:8082}

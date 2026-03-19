@@ -1,0 +1,655 @@
+{
+  "info": {
+    "name": "Microservices DevOps - Communication Flow",
+    "_postman_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "description": "Test collection for 3 Spring Boot microservices with inter-service communication flow.\n\n**Run order:**\n1. Health Checks → verify all services are up\n2. User Service → register & fetch users\n3. Product Service → create & fetch products\n4. Order Service → create order (triggers cross-service calls to User + Product)\n5. Verify → check order details, updated stock, and logs",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "USER_SERVICE_URL",
+      "value": "http://localhost:8081"
+    },
+    {
+      "key": "PRODUCT_SERVICE_URL",
+      "value": "http://localhost:8082"
+    },
+    {
+      "key": "ORDER_SERVICE_URL",
+      "value": "http://localhost:8083"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Health Checks",
+      "item": [
+        {
+          "name": "1.1 User Service Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{USER_SERVICE_URL}}/actuator/health",
+              "host": ["{{USER_SERVICE_URL}}"],
+              "path": ["actuator", "health"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('User Service is UP', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.status).to.eql('UP');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "1.2 Product Service Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{PRODUCT_SERVICE_URL}}/actuator/health",
+              "host": ["{{PRODUCT_SERVICE_URL}}"],
+              "path": ["actuator", "health"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Product Service is UP', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.status).to.eql('UP');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "1.3 Order Service Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{ORDER_SERVICE_URL}}/actuator/health",
+              "host": ["{{ORDER_SERVICE_URL}}"],
+              "path": ["actuator", "health"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Order Service is UP', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.status).to.eql('UP');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. User Service",
+      "item": [
+        {
+          "name": "2.1 List All Users (Seed Data)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{USER_SERVICE_URL}}/api/users",
+              "host": ["{{USER_SERVICE_URL}}"],
+              "path": ["api", "users"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Should return seed users', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.length).to.be.greaterThan(0);",
+                  "    console.log('Total users:', json.length);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.2 Register New User",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Test User\",\n    \"email\": \"testuser@example.com\",\n    \"password\": \"test123\"\n}"
+            },
+            "url": {
+              "raw": "{{USER_SERVICE_URL}}/api/users/register",
+              "host": ["{{USER_SERVICE_URL}}"],
+              "path": ["api", "users", "register"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('User registered successfully', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.id).to.not.be.undefined;",
+                  "    pm.collectionVariables.set('NEW_USER_ID', json.id);",
+                  "    console.log('Created user ID:', json.id);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.3 Login User",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"rohit@example.com\",\n    \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{USER_SERVICE_URL}}/api/users/login",
+              "host": ["{{USER_SERVICE_URL}}"],
+              "path": ["api", "users", "login"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Login successful', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.message).to.eql('Login successful');",
+                  "    console.log('Logged in as userId:', json.userId);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.4 Get User By ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{USER_SERVICE_URL}}/api/users/1",
+              "host": ["{{USER_SERVICE_URL}}"],
+              "path": ["api", "users", "1"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('User fetched by ID', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.name).to.eql('Rohit Kumar');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.5 Get Non-existent User (Error Case)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{USER_SERVICE_URL}}/api/users/999",
+              "host": ["{{USER_SERVICE_URL}}"],
+              "path": ["api", "users", "999"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 404 for non-existent user', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.error).to.include('not found');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3. Product Service",
+      "item": [
+        {
+          "name": "3.1 List All Products (Seed Data)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{PRODUCT_SERVICE_URL}}/api/products",
+              "host": ["{{PRODUCT_SERVICE_URL}}"],
+              "path": ["api", "products"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Should return seed products', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.length).to.be.greaterThan(0);",
+                  "    console.log('Total products:', json.length);",
+                  "    // Save first product stock for later verification",
+                  "    pm.collectionVariables.set('PRODUCT_1_STOCK_BEFORE', json[0].stock);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.2 Create New Product",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Mechanical Keyboard\",\n    \"description\": \"Cherry MX Blue switches, RGB backlight\",\n    \"price\": 129.99,\n    \"stock\": 30\n}"
+            },
+            "url": {
+              "raw": "{{PRODUCT_SERVICE_URL}}/api/products",
+              "host": ["{{PRODUCT_SERVICE_URL}}"],
+              "path": ["api", "products"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Product created successfully', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.id).to.not.be.undefined;",
+                  "    pm.collectionVariables.set('NEW_PRODUCT_ID', json.id);",
+                  "    console.log('Created product ID:', json.id);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.3 Get Product By ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{PRODUCT_SERVICE_URL}}/api/products/1",
+              "host": ["{{PRODUCT_SERVICE_URL}}"],
+              "path": ["api", "products", "1"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Product fetched by ID', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.name).to.eql('MacBook Pro M3');",
+                  "    pm.expect(json.stock).to.be.greaterThan(0);",
+                  "    console.log('Stock before order:', json.stock);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.4 Reserve Stock Directly",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"quantity\": 1\n}"
+            },
+            "url": {
+              "raw": "{{PRODUCT_SERVICE_URL}}/api/products/2/reserve",
+              "host": ["{{PRODUCT_SERVICE_URL}}"],
+              "path": ["api", "products", "2", "reserve"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Stock reserved successfully', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    console.log('Product:', json.name, '| New stock:', json.stock);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4. Order Service (Cross-Service Flow)",
+      "description": "These requests trigger inter-service communication.\nOrder Service calls User Service + Product Service internally.",
+      "item": [
+        {
+          "name": "4.1 ⭐ Create Order (Full Flow)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Correlation-Id", "value": "test-flow-001" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"userId\": 1,\n    \"productId\": 1,\n    \"quantity\": 2\n}"
+            },
+            "url": {
+              "raw": "{{ORDER_SERVICE_URL}}/api/orders",
+              "host": ["{{ORDER_SERVICE_URL}}"],
+              "path": ["api", "orders"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Order created with cross-service calls', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.id).to.not.be.undefined;",
+                  "    pm.expect(json.status).to.eql('CONFIRMED');",
+                  "    pm.expect(json.userName).to.eql('Rohit Kumar');",
+                  "    pm.expect(json.productName).to.eql('MacBook Pro M3');",
+                  "    pm.collectionVariables.set('ORDER_ID', json.id);",
+                  "    console.log('✅ Order created!');",
+                  "    console.log('   Order ID:', json.id);",
+                  "    console.log('   User:', json.userName);",
+                  "    console.log('   Product:', json.productName);",
+                  "    console.log('   Quantity:', json.quantity);",
+                  "    console.log('   Total:', json.totalPrice);",
+                  "    console.log('   Status:', json.status);",
+                  "    console.log('');",
+                  "    console.log('🔗 Check service logs for correlationId: test-flow-001');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.2 ⭐ Create Another Order (User 2, Product 3)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Correlation-Id", "value": "test-flow-002" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"userId\": 2,\n    \"productId\": 3,\n    \"quantity\": 1\n}"
+            },
+            "url": {
+              "raw": "{{ORDER_SERVICE_URL}}/api/orders",
+              "host": ["{{ORDER_SERVICE_URL}}"],
+              "path": ["api", "orders"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Second order created', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.userName).to.eql('Priya Sharma');",
+                  "    pm.expect(json.productName).to.eql('Sony WH-1000XM5');",
+                  "    console.log('✅ Order for', json.userName, '-', json.productName);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.3 ❌ Create Order - Invalid User (Should Fail)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Correlation-Id", "value": "test-error-001" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"userId\": 999,\n    \"productId\": 1,\n    \"quantity\": 1\n}"
+            },
+            "url": {
+              "raw": "{{ORDER_SERVICE_URL}}/api/orders",
+              "host": ["{{ORDER_SERVICE_URL}}"],
+              "path": ["api", "orders"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Order fails for non-existent user', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.error).to.include('User not found');",
+                  "    console.log('✅ Correctly rejected — user 999 does not exist');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.4 ❌ Create Order - Insufficient Stock (Should Fail)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Correlation-Id", "value": "test-error-002" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"userId\": 1,\n    \"productId\": 1,\n    \"quantity\": 99999\n}"
+            },
+            "url": {
+              "raw": "{{ORDER_SERVICE_URL}}/api/orders",
+              "host": ["{{ORDER_SERVICE_URL}}"],
+              "path": ["api", "orders"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Order fails for insufficient stock', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.error).to.include('Insufficient stock');",
+                  "    console.log('✅ Correctly rejected — not enough stock');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "5. Verify After Orders",
+      "description": "Run these AFTER creating orders to verify side effects across services.",
+      "item": [
+        {
+          "name": "5.1 Get Order By ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{ORDER_SERVICE_URL}}/api/orders/1",
+              "host": ["{{ORDER_SERVICE_URL}}"],
+              "path": ["api", "orders", "1"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Order details are correct', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.status).to.eql('CONFIRMED');",
+                  "    console.log('Order:', JSON.stringify(json, null, 2));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5.2 List All Orders",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{ORDER_SERVICE_URL}}/api/orders",
+              "host": ["{{ORDER_SERVICE_URL}}"],
+              "path": ["api", "orders"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Orders exist', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.length).to.be.greaterThan(0);",
+                  "    console.log('Total orders:', json.length);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5.3 Verify Product Stock Decreased",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{PRODUCT_SERVICE_URL}}/api/products/1",
+              "host": ["{{PRODUCT_SERVICE_URL}}"],
+              "path": ["api", "products", "1"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Stock decreased after order', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    console.log('Product:', json.name);",
+                  "    console.log('Current stock:', json.stock, '(was 25 initially)');",
+                  "    pm.expect(json.stock).to.be.below(25);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5.4 List All Users (Unchanged)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{USER_SERVICE_URL}}/api/users",
+              "host": ["{{USER_SERVICE_URL}}"],
+              "path": ["api", "users"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Users not affected by orders', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    console.log('Users still intact:', json.length);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
