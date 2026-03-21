@@ -11,96 +11,122 @@ env:
   ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
 
 jobs:
-
   build:
-
+    name: Build, Push to ECR, Deploy to ECS
     runs-on: ubuntu-latest
 
     steps:
 
-    - name: Checkout Code
-      uses: actions/checkout@v4
+      # Step 1: Checkout repository
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-    - name: Set up Java
-      uses: actions/setup-java@v4
-      with:
-        distribution: temurin
-        java-version: 17
+      # Step 2: Setup Java
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
 
-    - name: Build All Services
-      run: |
+      # Step 3: Build Microservices
+      - name: Build All Services
+        run: |
+          echo "Building user-service"
+          cd user-service
+          mvn clean install -DskipTests
+          cd ..
 
-        cd user-service
-        mvn clean install -DskipTests
-        cd ..
+          echo "Building product-service"
+          cd product-service
+          mvn clean install -DskipTests
+          cd ..
 
-        cd product-service
-        mvn clean install -DskipTests
-        cd ..
+          echo "Building order-service"
+          cd order-service
+          mvn clean install -DskipTests
+          cd ..
 
-        cd order-service
-        mvn clean install -DskipTests
-        cd ..
+      # Step 4: Configure AWS Credentials
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
 
-    - name: Configure AWS Credentials
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ env.AWS_REGION }}
+      # Step 5: Login to Amazon ECR
+      - name: Login to Amazon ECR
+        run: |
+          aws ecr get-login-password \
+          --region $AWS_REGION \
+          | docker login \
+          --username AWS \
+          --password-stdin \
+          $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
 
-    - name: Login to ECR
-      run: |
-        aws ecr get-login-password \
-        --region $AWS_REGION \
-        | docker login \
-        --username AWS \
-        --password-stdin \
-        $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+      # Step 6: Generate Image Tag
+      - name: Generate Image Tag
+        run: |
+          IMAGE_TAG=${GITHUB_SHA::7}
+          echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
+          echo "Using Image Tag: $IMAGE_TAG"
 
-    - name: Generate Image Tag
-      run: |
-        IMAGE_TAG=${GITHUB_SHA::7}
-        echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
+      # Step 7: Build and Push user-service
+      - name: Build and Push user-service
+        run: |
+          docker build \
+            -t user-service:$IMAGE_TAG \
+            ./user-service
 
-    - name: Build and Push user-service
-      run: |
+          docker tag \
+            user-service:$IMAGE_TAG \
+            $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/user-service:$IMAGE_TAG
 
-        docker build \
-        -t user-service:$IMAGE_TAG \
-        ./user-service
+          docker push \
+            $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/user-service:$IMAGE_TAG
 
-        docker tag \
-        user-service:$IMAGE_TAG \
-        $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/user-service:$IMAGE_TAG
+      # Step 8: Build and Push product-service
+      - name: Build and Push product-service
+        run: |
+          docker build \
+            -t product-service:$IMAGE_TAG \
+            ./product-service
 
-        docker push \
-        $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/user-service:$IMAGE_TAG
+          docker tag \
+            product-service:$IMAGE_TAG \
+            $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/product-service:$IMAGE_TAG
 
-    - name: Build and Push product-service
-      run: |
+          docker push \
+            $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/product-service:$IMAGE_TAG
 
-        docker build \
-        -t product-service:$IMAGE_TAG \
-        ./product-service
+      # Step 9: Build and Push order-service
+      - name: Build and Push order-service
+        run: |
+          docker build \
+            -t order-service:$IMAGE_TAG \
+            ./order-service
 
-        docker tag \
-        product-service:$IMAGE_TAG \
-        $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/product-service:$IMAGE_TAG
+          docker tag \
+            order-service:$IMAGE_TAG \
+            $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/order-service:$IMAGE_TAG
 
-        docker push \
-        $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/product-service:$IMAGE_TAG
+          docker push \
+            $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/order-service:$IMAGE_TAG
 
-    - name: Build and Push order-service
-      run: |
+      # Step 10: Deploy to ECS
+      - name: Update ECS Services
+        run: |
+          aws ecs update-service \
+            --cluster microservices-cluster \
+            --service user-service \
+            --force-new-deployment
 
-        docker build \
-        -t order-service:$IMAGE_TAG \
-        ./order-service
+          aws ecs update-service \
+            --cluster microservices-cluster \
+            --service product-service \
+            --force-new-deployment
 
-        docker tag \
-        order-service:$IMAGE_TAG \
-        $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/order-service:$IMAGE_TAG
-
-        docker push \
-        $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/order-service:$IMAGE_TAG
+          aws ecs update-service \
+            --cluster microservices-cluster \
+            --service order-service \
+            --force-new-deployment
