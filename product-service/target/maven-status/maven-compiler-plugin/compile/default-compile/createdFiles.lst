@@ -1,0 +1,17 @@
+com\devops\productservice\dto\common\RequestContext.class
+com\devops\productservice\controller\AdminProductController.class
+com\devops\productservice\dto\product\ProductRequest.class
+com\devops\productservice\security\SecurityConfig.class
+com\devops\productservice\controller\UserProductController.class
+com\devops\productservice\service\ProductService.class
+com\devops\productservice\filter\CorrelationIdFilter.class
+com\devops\productservice\security\JwtAuthFilter.class
+com\devops\productservice\dto\common\ErrorDetail.class
+com\devops\productservice\ProductServiceApplication.class
+com\devops\productservice\repository\ProductRepository.class
+com\devops\productservice\exception\GlobalExceptionHandler.class
+com\devops\productservice\security\JwtUtil.class
+com\devops\productservice\dto\common\ApiRequest.class
+com\devops\productservice\dto\common\ResponseContext.class
+com\devops\productservice\model\Product.class
+com\devops\productservice\dto\common\ApiResponse.class

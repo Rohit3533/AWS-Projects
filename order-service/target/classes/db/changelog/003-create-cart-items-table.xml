@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="003-create-cart-items-table" author="devops">
+        <preConditions onFail="MARK_RAN">
+            <not><tableExists tableName="cart_items"/></not>
+        </preConditions>
+        <createTable tableName="cart_items">
+            <column name="id" type="BIGINT" autoIncrement="true">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="cart_id" type="BIGINT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="product_id" type="BIGINT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="product_name" type="VARCHAR(255)"/>
+            <column name="price" type="DOUBLE">
+                <constraints nullable="false"/>
+            </column>
+            <column name="quantity" type="INT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP"/>
+        </createTable>
+
+        <addForeignKeyConstraint
+                constraintName="fk_cart_items_cart_id"
+                baseTableName="cart_items"
+                baseColumnNames="cart_id"
+                referencedTableName="carts"
+                referencedColumnNames="id"/>
+    </changeSet>
+
+</databaseChangeLog>

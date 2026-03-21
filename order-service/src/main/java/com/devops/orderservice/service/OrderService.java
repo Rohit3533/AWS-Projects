@@ -1,117 +1,128 @@
 package com.devops.orderservice.service;
 
-import com.devops.orderservice.model.Order;
+import com.devops.orderservice.dto.order.OrderItemDTO;
+import com.devops.orderservice.dto.order.OrderResponse;
+import com.devops.orderservice.model.*;
 import com.devops.orderservice.repository.OrderRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.HttpClientErrorException;
-import org.springframework.web.client.RestTemplate;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 public class OrderService {
 
     private static final Logger log = LoggerFactory.getLogger(OrderService.class);
-
     private final OrderRepository orderRepository;
-    private final RestTemplate restTemplate;
+    private final CartService cartService;
+    private final PaymentService paymentService;
 
-    @Value("${services.user-service.url}")
-    private String userServiceUrl;
-
-    @Value("${services.product-service.url}")
-    private String productServiceUrl;
-
-    public OrderService(OrderRepository orderRepository, RestTemplate restTemplate) {
+    public OrderService(OrderRepository orderRepository, CartService cartService,
+                        PaymentService paymentService) {
         this.orderRepository = orderRepository;
-        this.restTemplate = restTemplate;
+        this.cartService = cartService;
+        this.paymentService = paymentService;
     }
 
-    @SuppressWarnings("unchecked")
-    public Order createOrder(Long userId, Long productId, Integer quantity) {
-        log.info("=== ORDER CREATION STARTED === userId: {}, productId: {}, quantity: {}",
-                userId, productId, quantity);
+    @Transactional
+    public OrderResponse checkout(Long userId, Long addressId) {
+        log.info("=== CHECKOUT STARTED === userId: {}, addressId: {}", userId, addressId);
 
-        // Step 1: Validate user exists by calling User Service
-        log.info("Step 1: Validating user — calling User Service at {}", userServiceUrl);
-        Map<String, Object> user;
-        try {
-            String userUrl = userServiceUrl + "/api/users/" + userId;
-            log.info("Calling: GET {}", userUrl);
-            user = restTemplate.getForObject(userUrl, Map.class);
-            log.info("User validated — name: {}, email: {}", user.get("name"), user.get("email"));
-        } catch (HttpClientErrorException e) {
-            log.error("User Service returned error — status: {}, body: {}",
-                    e.getStatusCode(), e.getResponseBodyAsString());
-            throw new RuntimeException("User not found: " + userId);
-        } catch (Exception e) {
-            log.error("Failed to reach User Service: {}", e.getMessage());
-            throw new RuntimeException("User Service unavailable: " + e.getMessage());
+        // Step 1: Get cart
+        Cart cart = cartService.getCartEntity(userId);
+        if (cart.getItems().isEmpty()) {
+            throw new RuntimeException("Cart is empty. Add items before checkout.");
         }
 
-        // Step 2: Validate product and reserve stock by calling Product Service
-        log.info("Step 2: Reserving stock — calling Product Service at {}", productServiceUrl);
-        Map<String, Object> product;
-        try {
-            // First fetch product details
-            String productUrl = productServiceUrl + "/api/products/" + productId;
-            log.info("Calling: GET {}", productUrl);
-            product = restTemplate.getForObject(productUrl, Map.class);
-            log.info("Product found — name: {}, price: {}, stock: {}",
-                    product.get("name"), product.get("price"), product.get("stock"));
+        // Step 2: Calculate total
+        double totalPrice = cart.getItems().stream()
+                .mapToDouble(item -> item.getPrice() * item.getQuantity())
+                .sum();
 
-            // Reserve stock
-            String reserveUrl = productServiceUrl + "/api/products/" + productId + "/reserve";
-            log.info("Calling: POST {} with quantity: {}", reserveUrl, quantity);
-            restTemplate.postForObject(reserveUrl, Map.of("quantity", quantity), Map.class);
-            log.info("Stock reserved successfully");
-        } catch (HttpClientErrorException e) {
-            log.error("Product Service returned error — status: {}, body: {}",
-                    e.getStatusCode(), e.getResponseBodyAsString());
-            throw new RuntimeException("Product reservation failed: " + e.getResponseBodyAsString());
-        } catch (Exception e) {
-            log.error("Failed to reach Product Service: {}", e.getMessage());
-            throw new RuntimeException("Product Service unavailable: " + e.getMessage());
-        }
+        // Step 3: Process payment
+        log.info("Step 2: Processing payment — amount: {}", totalPrice);
+        Map<String, String> paymentResult = paymentService.processPayment(totalPrice, userId);
 
-        // Step 3: Create and save the order
+        // Step 4: Create order
         log.info("Step 3: Creating order record");
-        Double price = ((Number) product.get("price")).doubleValue();
-        Double totalPrice = price * quantity;
-
         Order order = new Order();
         order.setUserId(userId);
-        order.setProductId(productId);
-        order.setQuantity(quantity);
+        order.setDeliveryAddressId(addressId);
         order.setTotalPrice(totalPrice);
         order.setStatus("CONFIRMED");
-        order.setUserName((String) user.get("name"));
-        order.setProductName((String) product.get("name"));
+        order.setPaymentId(paymentResult.get("paymentId"));
+        order.setPaymentStatus(paymentResult.get("status"));
+
+        // Copy cart items to order items
+        for (CartItem cartItem : cart.getItems()) {
+            OrderItem orderItem = new OrderItem();
+            orderItem.setOrder(order);
+            orderItem.setProductId(cartItem.getProductId());
+            orderItem.setProductName(cartItem.getProductName());
+            orderItem.setPrice(cartItem.getPrice());
+            orderItem.setQuantity(cartItem.getQuantity());
+            order.getItems().add(orderItem);
+        }
 
         Order saved = orderRepository.save(order);
-        log.info("=== ORDER CREATION COMPLETED === orderId: {}, totalPrice: {}, status: {}",
-                saved.getId(), saved.getTotalPrice(), saved.getStatus());
 
-        return saved;
+        // Step 5: Clear cart
+        cartService.clearCart(userId);
+        log.info("=== CHECKOUT COMPLETED === orderId: {}", saved.getId());
+
+        return toOrderResponse(saved);
     }
 
-    public Order findById(Long id) {
-        log.info("Fetching order by id: {}", id);
-        return orderRepository.findById(id)
-                .orElseThrow(() -> {
-                    log.warn("Order not found — id: {}", id);
-                    return new RuntimeException("Order not found: " + id);
-                });
+    public OrderResponse getOrderById(Long orderId) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new RuntimeException("Order not found: " + orderId));
+        return toOrderResponse(order);
     }
 
-    public List<Order> findAll() {
-        log.info("Fetching all orders");
-        List<Order> orders = orderRepository.findAll();
-        log.info("Found {} orders", orders.size());
-        return orders;
+    public List<OrderResponse> getOrdersByUserId(Long userId) {
+        return orderRepository.findByUserId(userId).stream()
+                .map(this::toOrderResponse)
+                .collect(Collectors.toList());
+    }
+
+    public List<OrderResponse> getAllOrders() {
+        return orderRepository.findAll().stream()
+                .map(this::toOrderResponse)
+                .collect(Collectors.toList());
+    }
+
+    @Transactional
+    public OrderResponse updateOrderStatus(Long orderId, String status) {
+        log.info("Updating order {} status to: {}", orderId, status);
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new RuntimeException("Order not found: " + orderId));
+        order.setStatus(status);
+        Order saved = orderRepository.save(order);
+        return toOrderResponse(saved);
+    }
+
+    private OrderResponse toOrderResponse(Order order) {
+        OrderResponse response = new OrderResponse();
+        response.setOrderId(order.getId());
+        response.setUserId(order.getUserId());
+        response.setDeliveryAddressId(order.getDeliveryAddressId());
+        response.setTotalPrice(order.getTotalPrice());
+        response.setStatus(order.getStatus());
+        response.setPaymentId(order.getPaymentId());
+        response.setPaymentStatus(order.getPaymentStatus());
+        response.setCreatedAt(order.getCreatedAt() != null ? order.getCreatedAt().toString() : null);
+        response.setItems(order.getItems().stream().map(item -> {
+            OrderItemDTO dto = new OrderItemDTO();
+            dto.setProductId(item.getProductId());
+            dto.setProductName(item.getProductName());
+            dto.setPrice(item.getPrice());
+            dto.setQuantity(item.getQuantity());
+            return dto;
+        }).collect(Collectors.toList()));
+        return response;
     }
 }

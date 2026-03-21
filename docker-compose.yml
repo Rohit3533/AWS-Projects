@@ -1,4 +1,17 @@
 services:
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    networks:
+      - microservices-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
   user-service:
     build: ./user-service
     container_name: user-service
@@ -6,6 +19,8 @@ services:
       - "8081:8081"
     volumes:
       - user-data:/data
+    depends_on:
+      - redis
     networks:
       - microservices-net
     healthcheck:
@@ -17,6 +32,8 @@ services:
     environment:
       - SPRING_PROFILES_ACTIVE=default
       - H2_DATA_DIR=/data
+      - REDIS_HOST=redis
+      - JWT_SECRET=my-super-secret-key-for-dev-only-change-in-production-min32chars
 
   product-service:
     build: ./product-service
@@ -25,6 +42,8 @@ services:
       - "8082:8082"
     volumes:
       - product-data:/data
+    depends_on:
+      - redis
     networks:
       - microservices-net
     healthcheck:
@@ -36,6 +55,8 @@ services:
     environment:
       - SPRING_PROFILES_ACTIVE=default
       - H2_DATA_DIR=/data
+      - REDIS_HOST=redis
+      - JWT_SECRET=my-super-secret-key-for-dev-only-change-in-production-min32chars
 
   order-service:
     build: ./order-service
@@ -45,6 +66,7 @@ services:
     volumes:
       - order-data:/data
     depends_on:
+      - redis
       - user-service
       - product-service
     networks:
@@ -60,6 +82,9 @@ services:
       - USER_SERVICE_URL=http://user-service:8081
       - PRODUCT_SERVICE_URL=http://product-service:8082
       - H2_DATA_DIR=/data
+      - REDIS_HOST=redis
+      - JWT_SECRET=my-super-secret-key-for-dev-only-change-in-production-min32chars
+      - PAYMENT_MODE=mock
 
 networks:
   microservices-net:

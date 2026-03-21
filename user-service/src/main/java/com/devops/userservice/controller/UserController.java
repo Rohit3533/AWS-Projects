@@ -1,5 +1,8 @@
 package com.devops.userservice.controller;
 
+import com.devops.userservice.dto.common.ApiRequest;
+import com.devops.userservice.dto.common.ApiResponse;
+import com.devops.userservice.dto.user.*;
 import com.devops.userservice.model.User;
 import com.devops.userservice.service.UserService;
 import org.slf4j.Logger;
@@ -8,11 +11,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/users")
+@RequestMapping("/api/user")
 public class UserController {
 
     private static final Logger log = LoggerFactory.getLogger(UserController.class);
@@ -23,44 +25,82 @@ public class UserController {
     }
 
     @PostMapping("/register")
-    public ResponseEntity<?> register(@RequestBody User user) {
-        try {
-            log.info("POST /api/users/register — email: {}", user.getEmail());
-            User created = userService.register(user);
-            return ResponseEntity.status(HttpStatus.CREATED).body(created);
-        } catch (RuntimeException e) {
-            log.error("Registration error: {}", e.getMessage());
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
-        }
+    public ResponseEntity<ApiResponse<?>> register(@RequestBody ApiRequest<RegisterUserRequest> request) {
+        String correlationId = request.getCorrelationId();
+        log.info("[{}] POST /api/user/register", correlationId);
+
+        User user = userService.register(request.getData());
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success(correlationId, Map.of(
+                        "userId", user.getId(),
+                        "userName", user.getUserName(),
+                        "email", user.getEmail()
+                )));
     }
 
     @PostMapping("/login")
-    public ResponseEntity<?> login(@RequestBody Map<String, String> body) {
-        try {
-            log.info("POST /api/users/login — email: {}", body.get("email"));
-            Map<String, Object> result = userService.login(body.get("email"), body.get("password"));
-            return ResponseEntity.ok(result);
-        } catch (RuntimeException e) {
-            log.error("Login error: {}", e.getMessage());
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", e.getMessage()));
-        }
+    public ResponseEntity<ApiResponse<LoginResponse>> login(@RequestBody ApiRequest<LoginRequest> request) {
+        String correlationId = request.getCorrelationId();
+        log.info("[{}] POST /api/user/login", correlationId);
+
+        LoginResponse response = userService.login(request.getData());
+        return ResponseEntity.ok(ApiResponse.success(correlationId, response));
     }
 
-    @GetMapping("/{id}")
-    public ResponseEntity<?> getById(@PathVariable Long id) {
-        try {
-            log.info("GET /api/users/{}", id);
-            User user = userService.findById(id);
-            return ResponseEntity.ok(user);
-        } catch (RuntimeException e) {
-            log.error("User lookup error: {}", e.getMessage());
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", e.getMessage()));
-        }
+    @GetMapping("/profile/{userId}")
+    public ResponseEntity<ApiResponse<UserProfileResponse>> getProfile(@PathVariable Long userId) {
+        log.info("GET /api/user/profile/{}", userId);
+        UserProfileResponse profile = userService.getProfile(userId);
+        return ResponseEntity.ok(ApiResponse.success(null, profile));
     }
 
-    @GetMapping
-    public ResponseEntity<List<User>> getAll() {
-        log.info("GET /api/users");
-        return ResponseEntity.ok(userService.findAll());
+    @PutMapping("/profile/{userId}")
+    public ResponseEntity<ApiResponse<UserProfileResponse>> updateProfile(
+            @PathVariable Long userId,
+            @RequestBody ApiRequest<RegisterUserRequest> request) {
+        String correlationId = request.getCorrelationId();
+        log.info("[{}] PUT /api/user/profile/{}", correlationId, userId);
+
+        UserProfileResponse profile = userService.updateProfile(userId, request.getData());
+        return ResponseEntity.ok(ApiResponse.success(correlationId, profile));
+    }
+
+    @PostMapping("/profile/{userId}/address")
+    public ResponseEntity<ApiResponse<AddressDTO>> addAddress(
+            @PathVariable Long userId,
+            @RequestBody ApiRequest<AddressDTO> request) {
+        String correlationId = request.getCorrelationId();
+        log.info("[{}] POST /api/user/profile/{}/address", correlationId, userId);
+
+        AddressDTO address = userService.addAddress(userId, request.getData());
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success(correlationId, address));
+    }
+
+    @PutMapping("/profile/{userId}/address/{addressId}")
+    public ResponseEntity<ApiResponse<AddressDTO>> updateAddress(
+            @PathVariable Long userId,
+            @PathVariable Long addressId,
+            @RequestBody ApiRequest<AddressDTO> request) {
+        String correlationId = request.getCorrelationId();
+        log.info("[{}] PUT /api/user/profile/{}/address/{}", correlationId, userId, addressId);
+
+        AddressDTO address = userService.updateAddress(userId, addressId, request.getData());
+        return ResponseEntity.ok(ApiResponse.success(correlationId, address));
+    }
+
+    @DeleteMapping("/profile/{userId}/address/{addressId}")
+    public ResponseEntity<ApiResponse<Void>> deleteAddress(
+            @PathVariable Long userId,
+            @PathVariable Long addressId) {
+        log.info("DELETE /api/user/profile/{}/address/{}", userId, addressId);
+        userService.deleteAddress(userId, addressId);
+        return ResponseEntity.ok(ApiResponse.success(null, null));
+    }
+
+    @GetMapping("/profile/{userId}/address")
+    public ResponseEntity<ApiResponse<?>> getAddresses(@PathVariable Long userId) {
+        log.info("GET /api/user/profile/{}/address", userId);
+        return ResponseEntity.ok(ApiResponse.success(null, userService.getAddresses(userId)));
     }
 }
